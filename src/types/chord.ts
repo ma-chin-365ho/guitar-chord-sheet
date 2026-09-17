@@ -44,3 +44,4 @@ export interface SongData {
 export type ViewMode = 'dual' | 'edit' | 'view';
 export type ColumnLayout = '1col' | '2col';
 export type DiagramDisplay = 'none' | 'inline' | 'top' | 'both';
+export type AccidentalPreference = 'sharp' | 'flat';

@@ -39,7 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="app-header">
       <div className="brand">
         <Guitar className="brand-icon" size={26} />
-        <span>ChordCraft</span>
+        <span>ChordSketch</span>
       </div>
 
       <div className="header-controls">
@@ -78,9 +78,9 @@ export const Header: React.FC<HeaderProps> = ({
         <div style={{ width: '1px', height: '22px', background: 'var(--border-subtle)', margin: '0 4px' }} />
 
         {/* Import/Export */}
-        <button className="btn" onClick={onOpenImportExport} title="インポート / エクスポート">
-          <Upload size={15} />
-          <span>読込・保存</span>
+        <button className="btn" onClick={onOpenImportExport} title="読み込み・ダウンロード">
+          <Download size={15} />
+          <span>読み込み・ダウンロード</span>
         </button>
 
         {/* Print */}

@@ -85,3 +85,78 @@ export function transposeChordProText(text: string, semitones: number): string {
 export function calculateCapoTranspose(fromCapo: number, toCapo: number): number {
   return -(toCapo - fromCapo);
 }
+
+// Enharmonic maps for note-level conversion
+export const ENHARMONIC_SHARP_TO_FLAT: Record<string, string> = {
+  'C#': 'Db',
+  'D#': 'Eb',
+  'F#': 'Gb',
+  'G#': 'Ab',
+  'A#': 'Bb',
+  'E#': 'F',
+  'B#': 'C',
+};
+
+export const ENHARMONIC_FLAT_TO_SHARP: Record<string, string> = {
+  'Db': 'C#',
+  'Eb': 'D#',
+  'Gb': 'F#',
+  'Ab': 'G#',
+  'Bb': 'A#',
+  'Fb': 'E',
+  'Cb': 'B',
+};
+
+/**
+ * Converts a note to sharp or flat spelling
+ */
+export function convertAccidentalNote(note: string, to: 'sharp' | 'flat'): string {
+  const clean = note.trim();
+  if (to === 'sharp') {
+    return ENHARMONIC_FLAT_TO_SHARP[clean] || clean;
+  } else {
+    return ENHARMONIC_SHARP_TO_FLAT[clean] || clean;
+  }
+}
+
+/**
+ * Converts a chord (including slash chords like D/F# or C/E) to sharp or flat
+ */
+export function convertAccidentalChord(chord: string, to: 'sharp' | 'flat'): string {
+  if (!chord) return chord;
+  if (chord.includes('/')) {
+    const [top, bass] = chord.split('/');
+    return `${convertAccidentalChord(top, to)}/${convertAccidentalNote(bass, to)}`;
+  }
+  const match = chord.match(/^([A-G][b#]?)(.*)$/);
+  if (!match) return chord;
+  const [, root, modifier] = match;
+  const convertedRoot = convertAccidentalNote(root, to);
+  return `${convertedRoot}${modifier}`;
+}
+
+/**
+ * Converts all bracketed chords in ChordPro text to sharp or flat
+ */
+export function convertChordProAccidentals(text: string, to: 'sharp' | 'flat'): string {
+  if (!text) return text;
+  return text.replace(/\[([A-G][a-zA-Z0-9#b\+\-\/\(\)]*)\]/g, (match, chordName) => {
+    if (/^(Intro|Verse|Chorus|Bridge|Interlude|Outro|Solo|Aメロ|Bメロ|サビ|間奏|前奏|後奏|イントロ|アウトロ)$/i.test(chordName)) {
+      return match;
+    }
+    return `[${convertAccidentalChord(chordName, to)}]`;
+  });
+}
+
+/**
+ * Detects whether a ChordPro text or Key mostly uses sharps or flats
+ */
+export function detectAccidentalPreference(content: string, key?: string): 'sharp' | 'flat' {
+  if (key) {
+    if (key.includes('b')) return 'flat';
+    if (key.includes('#')) return 'sharp';
+  }
+  const flatCount = (content.match(/\[[A-G]b/g) || []).length;
+  const sharpCount = (content.match(/\[[A-G]#/g) || []).length;
+  return flatCount > sharpCount ? 'flat' : 'sharp';
+}

@@ -1,16 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChordDiagram } from './ChordDiagram';
+import { AccidentalPreference } from '../types/chord';
 import { X, Trash2, Check } from 'lucide-react';
 
 interface ChordPickerPopoverProps {
   initialChord?: string;
   position: { top: number; left: number };
+  accidentalPreference?: AccidentalPreference;
   onSelect: (chord: string) => void;
   onDelete?: () => void;
   onClose: () => void;
 }
 
-const ROOTS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+const SHARP_ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const FLAT_ROOTS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+
 const QUALITIES = [
   { label: 'maj', val: '' },
   { label: 'm', val: 'm' },
@@ -32,10 +36,12 @@ const QUICK_CHORDS = [
 export const ChordPickerPopover: React.FC<ChordPickerPopoverProps> = ({
   initialChord = '',
   position,
+  accidentalPreference = 'sharp',
   onSelect,
   onDelete,
   onClose,
 }) => {
+  const roots = accidentalPreference === 'flat' ? FLAT_ROOTS : SHARP_ROOTS;
   const [customInput, setCustomInput] = useState(initialChord);
   const [selectedRoot, setSelectedRoot] = useState('C');
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -130,7 +136,7 @@ export const ChordPickerPopover: React.FC<ChordPickerPopoverProps> = ({
           {/* Mini diagram preview */}
           {customInput && (
             <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', padding: '4px' }}>
-              <ChordDiagram chord={customInput} width={60} height={75} showName={false} />
+              <ChordDiagram chord={customInput} width={68} height={50} showName={false} />
             </div>
           )}
         </div>
@@ -160,7 +166,7 @@ export const ChordPickerPopover: React.FC<ChordPickerPopoverProps> = ({
             ルート音:
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '3px' }}>
-            {ROOTS.map((r) => (
+            {roots.map((r) => (
               <button
                 key={r}
                 type="button"

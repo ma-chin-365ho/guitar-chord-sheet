@@ -1,22 +1,20 @@
 import React from 'react';
-import { ColumnLayout, DiagramDisplay } from '../types/chord';
+import { ColumnLayout, DiagramDisplay, AccidentalPreference } from '../types/chord';
 import { 
   Columns, 
   AlignJustify, 
-  RotateCcw,
-  Undo2,
-  Redo2
+  Undo2, 
+  Redo2 
 } from 'lucide-react';
 
 interface ToolbarProps {
-  transpose: number;
-  onTransposeChange: (val: number) => void;
-  capo: number;
-  onCapoChange: (val: number) => void;
+  onTranspose: (semitones: number) => void;
   columnLayout: ColumnLayout;
   onColumnLayoutChange: (layout: ColumnLayout) => void;
   diagramDisplay: DiagramDisplay;
   onDiagramDisplayChange: (disp: DiagramDisplay) => void;
+  accidentalPreference: AccidentalPreference;
+  onAccidentalChange: (pref: AccidentalPreference) => void;
   canUndo?: boolean;
   canRedo?: boolean;
   onUndo?: () => void;
@@ -24,14 +22,13 @@ interface ToolbarProps {
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
-  transpose,
-  onTransposeChange,
-  capo,
-  onCapoChange,
+  onTranspose,
   columnLayout,
   onColumnLayoutChange,
   diagramDisplay,
   onDiagramDisplayChange,
+  accidentalPreference,
+  onAccidentalChange,
   canUndo = false,
   canRedo = false,
   onUndo,
@@ -39,7 +36,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 }) => {
   return (
     <div className="app-toolbar">
-      {/* Undo & Redo Group */}
+      {/* Undo & Redo & Transpose Group */}
       <div className="toolbar-group">
         <button
           className="btn btn-icon"
@@ -61,64 +58,28 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <Redo2 size={16} />
           <span>進む</span>
         </button>
-      </div>
 
-      <div style={{ width: '1px', height: '18px', background: 'var(--border-subtle)' }} />
-
-      {/* Transpose & Capo Group */}
-      <div className="toolbar-group">
-        <span className="toolbar-label">移調:</span>
+        {/* Transpose +/- buttons directly next to Redo */}
+        <span className="toolbar-label" style={{ marginLeft: '8px' }}>移調:</span>
         <div className="counter-control">
           <button
             className="counter-btn"
-            onClick={() => onTransposeChange(transpose - 1)}
+            onClick={() => onTranspose(-1)}
             title="半音下げる (-1)"
           >
             -
           </button>
-          <span className="counter-val">
-            {transpose > 0 ? `+${transpose}` : transpose}
-          </span>
           <button
             className="counter-btn"
-            onClick={() => onTransposeChange(transpose + 1)}
+            onClick={() => onTranspose(1)}
             title="半音上げる (+1)"
           >
             +
           </button>
         </div>
-        {transpose !== 0 && (
-          <button
-            className="btn btn-icon"
-            onClick={() => onTransposeChange(0)}
-            title="移調リセット"
-            style={{ padding: '0.35rem' }}
-          >
-            <RotateCcw size={14} />
-          </button>
-        )}
-
-        <div style={{ width: '1px', height: '18px', background: 'var(--border-subtle)', margin: '0 4px' }} />
-
-        <span className="toolbar-label">Capo:</span>
-        <div className="counter-control">
-          <button
-            className="counter-btn"
-            onClick={() => onCapoChange(Math.max(0, capo - 1))}
-            title="カポを下げる"
-          >
-            -
-          </button>
-          <span className="counter-val">{capo}</span>
-          <button
-            className="counter-btn"
-            onClick={() => onCapoChange(Math.min(9, capo + 1))}
-            title="カポを上げる"
-          >
-            +
-          </button>
-        </div>
       </div>
+
+      <div style={{ width: '1px', height: '18px', background: 'var(--border-subtle)' }} />
 
       {/* Diagrams & Layout */}
       <div className="toolbar-group">
@@ -156,6 +117,29 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <Columns size={14} />
           <span>2段</span>
         </button>
+
+        <div style={{ width: '1px', height: '18px', background: 'var(--border-subtle)', margin: '0 4px' }} />
+
+        {/* Enharmonic Accidental Toggle: # / b */}
+        <span className="toolbar-label">表記:</span>
+        <div className="btn-group" style={{ display: 'inline-flex' }}>
+          <button
+            className={`btn ${accidentalPreference === 'sharp' ? 'btn-primary' : ''}`}
+            style={{ padding: '0.3rem 0.65rem', fontWeight: 700 }}
+            onClick={() => onAccidentalChange('sharp')}
+            title="コードネーム・Keyをシャープ (#) 表記に統一"
+          >
+            #
+          </button>
+          <button
+            className={`btn ${accidentalPreference === 'flat' ? 'btn-primary' : ''}`}
+            style={{ padding: '0.3rem 0.65rem', fontWeight: 700 }}
+            onClick={() => onAccidentalChange('flat')}
+            title="コードネーム・Keyをフラット (♭) 表記に統一"
+          >
+            ♭
+          </button>
+        </div>
       </div>
     </div>
   );

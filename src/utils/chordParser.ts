@@ -26,6 +26,13 @@ export function parseChordPro(text: string): ParsedLine[] {
       continue;
     }
 
+    // Section header directive like {section: ...} or {sec: ...}
+    if (trimmed.startsWith('{section:') || trimmed.startsWith('{sec:')) {
+      const sectionName = trimmed.replace(/^\{sec(tion)?:\s*|\}$/g, '').trim();
+      parsedLines.push({ type: 'section', sectionTitle: sectionName });
+      continue;
+    }
+
     // Comment line or directive like {comment: ...} or # comment
     if (trimmed.startsWith('#') || trimmed.startsWith('{c:') || trimmed.startsWith('{comment:')) {
       const commentText = trimmed.replace(/^\{c(omment)?:\s*|\}$|^#\s*/g, '');
@@ -33,12 +40,24 @@ export function parseChordPro(text: string): ParsedLine[] {
       continue;
     }
 
-    // Section header like [Intro], [サビ], [Verse 1]
-    const sectionMatch = trimmed.match(SECTION_REGEX);
-    if (sectionMatch) {
-      const sectionName = trimmed.replace(/^\[|\]$/g, '');
+    // Explicit section bracket like [section: ...] or [sec: ...]
+    if (trimmed.startsWith('[section:') || trimmed.startsWith('[sec:')) {
+      const sectionName = trimmed.replace(/^\[sec(tion)?:\s*|\]$/g, '').trim();
       parsedLines.push({ type: 'section', sectionTitle: sectionName });
       continue;
+    }
+
+    // Bracketed line like [Intro], [サビ], [Verse 1], [], or any single-bracket line not being a chord
+    const isSingleBracketLine = trimmed.startsWith('[') && trimmed.endsWith(']') && !trimmed.slice(1, -1).includes('[');
+    if (isSingleBracketLine) {
+      const inner = trimmed.slice(1, -1).trim();
+      const isKnownSection = SECTION_REGEX.test(trimmed) || inner === '';
+      const isChordLike = /^[A-G][b#]?(m|maj|min|dim|aug|sus|add|M)?[0-9]*(\/[A-G][b#]?)?$/i.test(inner);
+      
+      if (isKnownSection || !isChordLike) {
+        parsedLines.push({ type: 'section', sectionTitle: inner });
+        continue;
+      }
     }
 
     // Check if the line has chord brackets [C] etc.
@@ -238,7 +257,7 @@ export function stringifyChordPro(lines: ParsedLine[]): string {
     } else if (line.type === 'comment') {
       result.push(`# ${line.content || ''}`);
     } else if (line.type === 'section') {
-      result.push(`[${line.sectionTitle || 'Section'}]`);
+      result.push(`{section: ${line.sectionTitle || ''}}`);
     } else if (line.type === 'lyrics' && line.pairs) {
       let lineText = '';
       for (const pair of line.pairs) {

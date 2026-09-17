@@ -88,6 +88,15 @@ input, textarea, select {
   min-height: 100vh;
 }
 
+/* Sticky Top Container (Header + Toolbar) */
+.sticky-top-wrapper {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
 /* Header */
 .app-header {
   background: var(--bg-card);
@@ -97,10 +106,6 @@ input, textarea, select {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  box-shadow: var(--shadow-sm);
 }
 
 .brand {
@@ -367,6 +372,14 @@ input, textarea, select {
   color: var(--text-main);
   text-align: center;
   outline: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.inline-meta-input::-webkit-outer-spin-button,
+.inline-meta-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .inline-meta-input:focus {
@@ -571,21 +584,28 @@ input, textarea, select {
 }
 
 .chord-lyric-pair-interactive.has-inline-diagram {
-  padding-top: 1.9rem;
-  align-items: center;
+  padding-top: 0;
+  align-items: flex-start;
+}
+
+.chord-lyric-pair-interactive.has-inline-diagram .chord-tag.clickable,
+.chord-lyric-pair-interactive.has-inline-diagram .chord-add-placeholder {
+  position: static;
+  margin-bottom: 0.15rem;
 }
 
 .inline-diagram-container {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0.15rem 0;
+  margin: 0.1rem 0 0.25rem 0;
   padding: 2px;
   background: var(--bg-elevated);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
-  opacity: 0.9;
+  opacity: 0.95;
   transition: opacity 0.12s, transform 0.12s;
+  align-self: flex-start;
 }
 
 .inline-diagram-container:hover {
@@ -667,30 +687,80 @@ input, textarea, select {
   transform: scale(1.15);
 }
 
-.chord-lyric-pair-interactive:hover .chord-add-placeholder {
-  opacity: 0.8;
+/* Lyric Wrapper & Drag Handle */
+.lyric-wrapper {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
 }
 
-.chord-add-placeholder:hover {
+.lyric-drag-handle {
+  cursor: grab;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  opacity: 0;
+  width: 10px;
+  margin-right: -1px;
+  transition: opacity 0.12s, color 0.12s;
+  user-select: none;
+}
+
+.chord-lyric-pair-interactive:hover .lyric-drag-handle {
+  opacity: 0.5;
+}
+
+.lyric-drag-handle:hover {
   opacity: 1 !important;
-  background: var(--accent-primary);
-  color: #fff;
-  border-color: var(--accent-primary);
+  color: var(--accent-primary);
 }
 
-/* Inline Lyric Input */
+.lyric-drag-handle:active {
+  cursor: grabbing;
+}
+
+.is-dragging-lyric {
+  opacity: 0.35;
+}
+
+/* Inline Lyric Input & Sizer */
+.lyric-input-box {
+  display: inline-grid;
+  vertical-align: bottom;
+  align-items: center;
+  position: relative;
+  min-width: 1.2ch;
+}
+
+.lyric-sizer {
+  grid-area: 1 / 1;
+  visibility: hidden;
+  white-space: pre;
+  font-family: var(--font-main);
+  font-size: 1.1rem;
+  line-height: 1.4;
+  padding: 0.05rem 0.2rem;
+  box-sizing: border-box;
+  min-width: 1.2ch;
+  pointer-events: none;
+}
+
 .lyric-input {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-width: 100%;
   font-family: var(--font-main);
   font-size: 1.1rem;
   background: transparent;
   border: none;
   border-bottom: 1px solid transparent;
   color: var(--text-main);
-  padding: 0.05rem 0.05rem;
+  padding: 0.05rem 0.2rem;
   outline: none;
   transition: border-color 0.15s;
-  min-width: 1ch;
   line-height: 1.4;
+  box-sizing: border-box;
 }
 
 .lyric-input:focus {
@@ -857,6 +927,7 @@ input, textarea, select {
     font-size: 11pt;
   }
 
+  .sticky-top-wrapper,
   .app-header,
   .app-toolbar,
   .autoscroll-bar,
@@ -921,6 +992,10 @@ input, textarea, select {
     color: #000000 !important;
     font-size: 10.5pt !important;
     border: none !important;
+  }
+
+  .lyric-sizer {
+    font-size: 10.5pt !important;
   }
 
   .section-badge-input {

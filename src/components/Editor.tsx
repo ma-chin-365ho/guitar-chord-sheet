@@ -87,8 +87,8 @@ export const Editor: React.FC<EditorProps> = ({ song, onChange }) => {
             key={sec}
             className="palette-btn"
             style={{ background: 'var(--section-bg)', color: 'var(--section-text)', borderColor: 'var(--border-subtle)' }}
-            onClick={() => insertAtCursor(`\n[${sec}]\n`)}
-            title={`[${sec}] セクション見出しを挿入`}
+            onClick={() => insertAtCursor(`\n{section: ${sec}}\n`)}
+            title={`{section: ${sec}} セクション見出しを挿入`}
           >
             <Tag size={11} style={{ marginRight: '2px', verticalAlign: 'middle' }} />
             {sec}

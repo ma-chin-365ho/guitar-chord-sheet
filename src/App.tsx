@@ -1,26 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { SongData, ColumnLayout, DiagramDisplay } from './types/chord';
+import { SongData, ColumnLayout, DiagramDisplay, AccidentalPreference } from './types/chord';
 import { SAMPLE_SONGS } from './data/sampleSongs';
 import { Header } from './components/Header';
 import { Toolbar } from './components/Toolbar';
 import { SheetViewer } from './components/SheetViewer';
 import { AutoScrollControls } from './components/AutoScrollControls';
 import { ImportExportModal } from './components/ImportExportModal';
+import { 
+  transposeChordProText, 
+  transposeChord, 
+  convertChordProAccidentals, 
+  convertAccidentalChord, 
+  detectAccidentalPreference 
+} from './utils/transposer';
 
-const STORAGE_KEY_SONGS = 'chordcraft_songs_v1';
-const STORAGE_KEY_CURRENT = 'chordcraft_current_song_id';
-const STORAGE_KEY_THEME = 'chordcraft_theme';
+const STORAGE_KEY_SONGS = 'chordsketch_songs_v1';
+const LEGACY_STORAGE_KEY_SONGS = 'chordcraft_songs_v1';
+const STORAGE_KEY_CURRENT = 'chordsketch_current_song_id';
+const LEGACY_STORAGE_KEY_CURRENT = 'chordcraft_current_song_id';
+const STORAGE_KEY_THEME = 'chordsketch_theme';
+const LEGACY_STORAGE_KEY_THEME = 'chordcraft_theme';
 
 export const App: React.FC = () => {
   // Theme state
   const [isDark, setIsDark] = useState<boolean>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_THEME);
+    const saved = localStorage.getItem(STORAGE_KEY_THEME) || localStorage.getItem(LEGACY_STORAGE_KEY_THEME);
     return saved !== null ? saved === 'dark' : true; // default dark
   });
 
   // Songs state
   const [songs, setSongs] = useState<SongData[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_SONGS);
+    const saved = localStorage.getItem(STORAGE_KEY_SONGS) || localStorage.getItem(LEGACY_STORAGE_KEY_SONGS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -33,7 +43,7 @@ export const App: React.FC = () => {
   });
 
   const [currentSongId, setCurrentSongId] = useState<string>(() => {
-    const savedId = localStorage.getItem(STORAGE_KEY_CURRENT);
+    const savedId = localStorage.getItem(STORAGE_KEY_CURRENT) || localStorage.getItem(LEGACY_STORAGE_KEY_CURRENT);
     if (savedId && songs.some((s) => s.id === savedId)) return savedId;
     return songs[0]?.id || SAMPLE_SONGS[0].id;
   });
@@ -41,9 +51,7 @@ export const App: React.FC = () => {
   // View preferences
   const [columnLayout, setColumnLayout] = useState<ColumnLayout>('1col');
   const [diagramDisplay, setDiagramDisplay] = useState<DiagramDisplay>('top');
-
-  // Transposition state
-  const [transpose, setTranspose] = useState<number>(0);
+  const [accidentalPreference, setAccidentalPreference] = useState<AccidentalPreference>('sharp');
 
   // Modal state
   const [isImportExportOpen, setIsImportExportOpen] = useState<boolean>(false);
@@ -71,10 +79,11 @@ export const App: React.FC = () => {
   const [history, setHistory] = useState<SongData[]>(() => [currentSong]);
   const [historyIndex, setHistoryIndex] = useState<number>(0);
 
-  // Reset history stack when song changes
+  // Reset history stack and detect accidental preference when song changes
   useEffect(() => {
     setHistory([currentSong]);
     setHistoryIndex(0);
+    setAccidentalPreference(detectAccidentalPreference(currentSong.content, currentSong.key));
   }, [currentSongId]);
 
   // Update current song and record history
@@ -150,17 +159,16 @@ export const App: React.FC = () => {
   const handleNewSong = () => {
     const newSong: SongData = {
       id: `song-${Date.now()}`,
-      title: '新しい楽曲',
+      title: '',
       artist: '',
       key: 'C',
       capo: 0,
       tempo: 80,
-      content: `[Intro]\n[C] [G] [Am] [F]\n\n[サビ]\n[C]ここに歌詞を[G]入力します\n[Am]文字やコードを[F]クリックして編集\n`,
+      content: `{section: }\n[C] \n`,
       updatedAt: Date.now(),
     };
     setSongs((prev) => [newSong, ...prev]);
     setCurrentSongId(newSong.id);
-    setTranspose(0);
   };
 
   // Duplicate song
@@ -183,58 +191,79 @@ export const App: React.FC = () => {
     const remaining = songs.filter((s) => s.id !== currentSong.id);
     setSongs(remaining);
     setCurrentSongId(remaining[0].id);
-    setTranspose(0);
   };
 
   // Select song
   const handleSelectSong = (id: string) => {
     setCurrentSongId(id);
-    setTranspose(0);
+  };
+
+  // Transpose song directly and commit to content & key (with undo support)
+  const handleTranspose = (semitones: number) => {
+    const newContent = transposeChordProText(currentSong.content, semitones);
+    const newKey = currentSong.key ? transposeChord(currentSong.key, semitones) : currentSong.key;
+    handleUpdateSong({
+      content: newContent,
+      key: newKey,
+    });
+  };
+
+  // Handle accidental toggle (# / b)
+  const handleAccidentalChange = (preference: AccidentalPreference) => {
+    setAccidentalPreference(preference);
+    const newContent = convertChordProAccidentals(currentSong.content, preference);
+    const newKey = currentSong.key ? convertAccidentalChord(currentSong.key, preference) : currentSong.key;
+    if (newContent !== currentSong.content || newKey !== currentSong.key) {
+      handleUpdateSong({
+        content: newContent,
+        key: newKey,
+      });
+    }
   };
 
   // Handle capo change
   const handleCapoChange = (newCapo: number) => {
-    handleUpdateSong({ capo: newCapo });
+    handleUpdateSong({ capo: Math.min(15, Math.max(0, newCapo)) });
   };
 
   return (
     <div className="app-container">
-      {/* Top Header */}
-      <Header
-        songs={songs}
-        currentSongId={currentSongId}
-        onSelectSong={handleSelectSong}
-        onNewSong={handleNewSong}
-        onDuplicateSong={handleDuplicateSong}
-        onDeleteSong={handleDeleteSong}
-        onOpenImportExport={() => setIsImportExportOpen(true)}
-        isDark={isDark}
-        onToggleTheme={() => setIsDark(!isDark)}
-      />
+      {/* Sticky Header & Toolbar Container */}
+      <div className="sticky-top-wrapper">
+        <Header
+          songs={songs}
+          currentSongId={currentSongId}
+          onSelectSong={handleSelectSong}
+          onNewSong={handleNewSong}
+          onDuplicateSong={handleDuplicateSong}
+          onDeleteSong={handleDeleteSong}
+          onOpenImportExport={() => setIsImportExportOpen(true)}
+          isDark={isDark}
+          onToggleTheme={() => setIsDark(!isDark)}
+        />
 
-      {/* Main Toolbar */}
-      <Toolbar
-        transpose={transpose}
-        onTransposeChange={setTranspose}
-        capo={currentSong.capo}
-        onCapoChange={handleCapoChange}
-        columnLayout={columnLayout}
-        onColumnLayoutChange={setColumnLayout}
-        diagramDisplay={diagramDisplay}
-        onDiagramDisplayChange={setDiagramDisplay}
-        canUndo={historyIndex > 0}
-        canRedo={historyIndex < history.length - 1}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-      />
+        <Toolbar
+          onTranspose={handleTranspose}
+          columnLayout={columnLayout}
+          onColumnLayoutChange={setColumnLayout}
+          diagramDisplay={diagramDisplay}
+          onDiagramDisplayChange={setDiagramDisplay}
+          accidentalPreference={accidentalPreference}
+          onAccidentalChange={handleAccidentalChange}
+          canUndo={historyIndex > 0}
+          canRedo={historyIndex < history.length - 1}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+        />
+      </div>
 
       {/* Main Workspace Area (Single interactive sheet) */}
       <main className="main-workspace-sheet">
         <SheetViewer
           song={currentSong}
-          transpose={transpose}
           columnLayout={columnLayout}
           diagramDisplay={diagramDisplay}
+          accidentalPreference={accidentalPreference}
           onUpdateSong={handleUpdateSong}
         />
       </main>

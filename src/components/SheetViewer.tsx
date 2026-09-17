@@ -1,16 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { SongData, ColumnLayout, DiagramDisplay, ParsedLine, ChordPair } from '../types/chord';
+import { SongData, ColumnLayout, DiagramDisplay, ParsedLine, ChordPair, AccidentalPreference } from '../types/chord';
 import { parseChordPro, extractUniqueChords, stringifyChordPro } from '../utils/chordParser';
-import { transposeChordProText } from '../utils/transposer';
 import { ChordDiagram } from './ChordDiagram';
 import { ChordPickerPopover } from './ChordPickerPopover';
-import { Plus, Trash2, Tag, Music, Edit2, GripVertical } from 'lucide-react';
+import { Plus, Trash2, Tag, Music, Edit2, GripVertical, GripHorizontal } from 'lucide-react';
 
 interface SheetViewerProps {
   song: SongData;
-  transpose: number;
   columnLayout: ColumnLayout;
   diagramDisplay: DiagramDisplay;
+  accidentalPreference?: AccidentalPreference;
   onUpdateSong: (updated: Partial<SongData>) => void;
 }
 
@@ -22,39 +21,35 @@ interface ActivePopoverState {
   position: { top: number; left: number };
 }
 
-interface DraggedChordInfo {
+interface DraggedItemInfo {
+  type: 'chord' | 'lyric';
   sourceLineIndex: number;
   sourcePairIndex: number;
-  chord: string;
+  value: string;
 }
 
 export const SheetViewer: React.FC<SheetViewerProps> = ({
   song,
-  transpose,
   columnLayout,
   diagramDisplay,
+  accidentalPreference = 'sharp',
   onUpdateSong,
 }) => {
-  // Transpose the content for display
-  const transposedContent = useMemo(() => {
-    return transposeChordProText(song.content, transpose);
-  }, [song.content, transpose]);
-
-  // Parse lines
+  // Parse lines directly from song.content
   const parsedLines: ParsedLine[] = useMemo(() => {
     return parseChordPro(song.content);
   }, [song.content]);
 
-  // Unique chords in current key
+  // Unique chords in current song
   const uniqueChords = useMemo(() => {
-    return extractUniqueChords(transposedContent);
-  }, [transposedContent]);
+    return extractUniqueChords(song.content);
+  }, [song.content]);
 
   // Popover state
   const [popover, setPopover] = useState<ActivePopoverState | null>(null);
 
-  // Drag and Drop state (Chords)
-  const [draggedChord, setDraggedChord] = useState<DraggedChordInfo | null>(null);
+  // Drag and Drop state (Chords & Lyrics)
+  const [draggedItem, setDraggedItem] = useState<DraggedItemInfo | null>(null);
   const [dropTarget, setDropTarget] = useState<{ lineIndex: number; pairIndex: number } | null>(null);
 
   // Drag and Drop state (Sections)
@@ -121,14 +116,21 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
   };
 
   // Drag handlers
-  const handleDragStart = (e: React.DragEvent, lineIndex: number, pairIndex: number, chord: string) => {
-    e.dataTransfer.setData('text/plain', chord);
+  const handleDragStart = (
+    e: React.DragEvent,
+    type: 'chord' | 'lyric',
+    lineIndex: number,
+    pairIndex: number,
+    value: string
+  ) => {
+    e.dataTransfer.setData('text/plain', value);
+    e.dataTransfer.setData('application/type', type);
     e.dataTransfer.effectAllowed = 'move';
-    setDraggedChord({ sourceLineIndex: lineIndex, sourcePairIndex: pairIndex, chord });
+    setDraggedItem({ type, sourceLineIndex: lineIndex, sourcePairIndex: pairIndex, value });
   };
 
   const handleDragEnd = () => {
-    setDraggedChord(null);
+    setDraggedItem(null);
     setDropTarget(null);
   };
 
@@ -148,11 +150,11 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
 
   const handleDrop = (e: React.DragEvent, targetLineIndex: number, targetPairIndex: number) => {
     e.preventDefault();
-    if (!draggedChord) return;
+    if (!draggedItem) return;
 
-    const { sourceLineIndex, sourcePairIndex, chord } = draggedChord;
+    const { type, sourceLineIndex, sourcePairIndex, value } = draggedItem;
     if (sourceLineIndex === targetLineIndex && sourcePairIndex === targetPairIndex) {
-      setDraggedChord(null);
+      setDraggedItem(null);
       setDropTarget(null);
       return;
     }
@@ -165,19 +167,35 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
       const sourcePairs = [...sourceLine.pairs];
       const targetPairs = sourceLineIndex === targetLineIndex ? sourcePairs : [...targetLine.pairs];
 
-      const targetExistingChord = targetPairs[targetPairIndex]?.chord;
+      if (type === 'chord') {
+        const targetExistingChord = targetPairs[targetPairIndex]?.chord;
 
-      // Move dragged chord to target
-      targetPairs[targetPairIndex] = {
-        ...targetPairs[targetPairIndex],
-        chord: chord,
-      };
+        // Move dragged chord to target
+        targetPairs[targetPairIndex] = {
+          ...targetPairs[targetPairIndex],
+          chord: value,
+        };
 
-      // Put previous target chord into source (swap) or remove from source
-      sourcePairs[sourcePairIndex] = {
-        ...sourcePairs[sourcePairIndex],
-        chord: targetExistingChord,
-      };
+        // Put previous target chord into source (swap) or remove from source
+        sourcePairs[sourcePairIndex] = {
+          ...sourcePairs[sourcePairIndex],
+          chord: targetExistingChord,
+        };
+      } else if (type === 'lyric') {
+        const targetExistingLyric = targetPairs[targetPairIndex]?.lyric;
+
+        // Move dragged lyric to target
+        targetPairs[targetPairIndex] = {
+          ...targetPairs[targetPairIndex],
+          lyric: value,
+        };
+
+        // Put previous target lyric into source (swap)
+        sourcePairs[sourcePairIndex] = {
+          ...sourcePairs[sourcePairIndex],
+          lyric: targetExistingLyric || '',
+        };
+      }
 
       newLines[sourceLineIndex] = { ...sourceLine, pairs: sourcePairs };
       if (sourceLineIndex !== targetLineIndex) {
@@ -187,7 +205,7 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
       commitLines(newLines);
     }
 
-    setDraggedChord(null);
+    setDraggedItem(null);
     setDropTarget(null);
   };
 
@@ -216,16 +234,115 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
     const scrollY = window.scrollY;
     const scrollX = window.scrollX;
 
+    const defaultDisplayChord = 'C';
     setPopover({
       lineIndex,
       pairIndex,
       isNew: true,
-      initialChord: 'C',
+      initialChord: defaultDisplayChord,
       position: {
         top: rect.bottom + scrollY + 4,
         left: rect.left + scrollX,
       },
     });
+  };
+
+  // Handle double clicking anywhere on a lyric input to insert a chord at that exact position
+  const handleLyricDoubleClick = (
+    e: React.MouseEvent<HTMLInputElement>,
+    lineIndex: number,
+    pairIndex: number
+  ) => {
+    e.stopPropagation();
+    const input = e.currentTarget;
+    const clickPos = input.selectionStart ?? 0;
+    const currentText = input.value;
+
+    const newLines = [...parsedLines];
+    const targetLine = newLines[lineIndex];
+    if (!targetLine || targetLine.type !== 'lyrics' || !targetLine.pairs) return;
+
+    const currentPairs = [...targetLine.pairs];
+    const currentPair = currentPairs[pairIndex];
+    if (!currentPair) return;
+
+    const rect = input.getBoundingClientRect();
+    const scrollY = window.scrollY;
+    const scrollX = window.scrollX;
+
+    const baseChordToSave = 'C';
+
+    // Case 1: The pair has NO chord yet, and click is at start or short string
+    if (!currentPair.chord && (clickPos === 0 || currentText.trim().length <= 1)) {
+      currentPairs[pairIndex] = { ...currentPair, chord: baseChordToSave };
+      newLines[lineIndex] = { ...targetLine, pairs: currentPairs };
+      commitLines(newLines);
+
+      setPopover({
+        lineIndex,
+        pairIndex,
+        isNew: true,
+        initialChord: 'C',
+        position: {
+          top: rect.bottom + scrollY + 4,
+          left: rect.left + scrollX,
+        },
+      });
+      return;
+    }
+
+    // Case 2: Split text at click position
+    // e.g. "カントリーロード" -> "カントリー" and "[C]ロード"
+    const splitIndex = clickPos > 0 && clickPos < currentText.length ? clickPos : 0;
+
+    if (splitIndex > 0) {
+      const beforeText = currentText.slice(0, splitIndex);
+      const afterText = currentText.slice(splitIndex);
+
+      const updatedFirstPair = { ...currentPair, lyric: beforeText };
+      const newSecondPair = { chord: baseChordToSave, lyric: afterText };
+
+      currentPairs.splice(pairIndex, 1, updatedFirstPair, newSecondPair);
+      newLines[lineIndex] = { ...targetLine, pairs: currentPairs };
+      commitLines(newLines);
+
+      const approxCharWidth = 14;
+      const leftOffset = Math.min(rect.width - 20, splitIndex * approxCharWidth);
+
+      setPopover({
+        lineIndex,
+        pairIndex: pairIndex + 1,
+        isNew: true,
+        initialChord: 'C',
+        position: {
+          top: rect.bottom + scrollY + 4,
+          left: rect.left + scrollX + leftOffset,
+        },
+      });
+    } else {
+      // Insert right before
+      const newPair = { chord: baseChordToSave, lyric: ' ' };
+      currentPairs.splice(pairIndex, 0, newPair);
+      newLines[lineIndex] = { ...targetLine, pairs: currentPairs };
+      commitLines(newLines);
+
+      setPopover({
+        lineIndex,
+        pairIndex,
+        isNew: true,
+        initialChord: 'C',
+        position: {
+          top: rect.bottom + scrollY + 4,
+          left: rect.left + scrollX,
+        },
+      });
+    }
+  };
+
+  // Handle double clicking on the empty space of a line
+  const handleWrapperDoubleClick = (e: React.MouseEvent, lineIndex: number) => {
+    if (e.target !== e.currentTarget) return;
+    handleAddChordPairToEndOfLine(e, lineIndex);
   };
 
   // Insert chord into specific pair
@@ -309,20 +426,18 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
     const newLines = [...parsedLines];
     newLines.splice(indexAfter + 1, 0, {
       type: 'lyrics',
-      pairs: [{ chord: 'C', lyric: '歌詞を入力' }],
+      pairs: [{ chord: 'C', lyric: '' }],
     });
     commitLines(newLines);
   };
 
   // Add new section
-  const handleAddSection = (indexAfter: number, title = 'サビ') => {
+  const handleAddSection = (indexAfter: number, title = '') => {
     const newLines = [...parsedLines];
-    newLines.splice(
-      indexAfter + 1,
-      0,
-      { type: 'section', sectionTitle: title },
-      { type: 'lyrics', pairs: [{ chord: 'G', lyric: '新しい歌詞' }] }
-    );
+    newLines.splice(indexAfter + 1, 0, {
+      type: 'section',
+      sectionTitle: title,
+    });
     commitLines(newLines);
   };
 
@@ -405,64 +520,130 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
             >
               {/* Custom key if not in standard list */}
               {song.key && 
-                ![
-                  'C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B',
-                  'Am', 'A#m', 'Bbm', 'Bm', 'Cm', 'C#m', 'Dbm', 'Dm', 'D#m', 'Ebm', 'Em', 'Fm', 'F#m', 'Gbm', 'Gm', 'G#m', 'Abm'
-                ].includes(song.key) && (
+                !(accidentalPreference === 'flat'
+                  ? [
+                      'C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B',
+                      'Am', 'Bbm', 'Bm', 'Cm', 'Dbm', 'Dm', 'Ebm', 'Em', 'Fm', 'Gbm', 'Gm', 'Abm'
+                    ]
+                  : [
+                      'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B',
+                      'Am', 'A#m', 'Bm', 'Cm', 'C#m', 'Dm', 'D#m', 'Em', 'Fm', 'F#m', 'Gm', 'G#m'
+                    ]
+                ).includes(song.key) && (
                 <option value={song.key}>{song.key}</option>
               )}
               <optgroup label="メジャー (Major)">
-                {[
-                  'C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B'
-                ].map((k) => (
+                {(accidentalPreference === 'flat'
+                  ? ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
+                  : ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+                ).map((k) => (
                   <option key={k} value={k}>
                     {k}
                   </option>
                 ))}
               </optgroup>
               <optgroup label="マイナー (Minor)">
-                {[
-                  'Am', 'A#m', 'Bbm', 'Bm', 'Cm', 'C#m', 'Dbm', 'Dm', 'D#m', 'Ebm', 'Em', 'Fm', 'F#m', 'Gbm', 'Gm', 'G#m', 'Abm'
-                ].map((k) => (
+                {(accidentalPreference === 'flat'
+                  ? ['Am', 'Bbm', 'Bm', 'Cm', 'Dbm', 'Dm', 'Ebm', 'Em', 'Fm', 'Gbm', 'Gm', 'Abm']
+                  : ['Am', 'A#m', 'Bm', 'Cm', 'C#m', 'Dm', 'D#m', 'Em', 'Fm', 'F#m', 'Gm', 'G#m']
+                ).map((k) => (
                   <option key={k} value={k}>
                     {k}
                   </option>
                 ))}
               </optgroup>
             </select>
-            {transpose !== 0 && (
-              <span style={{ color: 'var(--accent-primary)', marginLeft: '4px', fontWeight: 700 }}>
-                ({transpose > 0 ? `+${transpose}` : transpose})
-              </span>
-            )}
           </div>
 
           {/* Capo */}
           <div className="sheet-meta-item">
-            <span className="capo-badge">
-              Capo:
+            <span>Capo: </span>
+            <div className="counter-control">
+              <button
+                className="counter-btn"
+                onClick={() => onUpdateSong({ capo: Math.max(0, song.capo - 1) })}
+                title="カポを下げる (-1)"
+              >
+                -
+              </button>
               <input
-                type="number"
-                min="0"
-                max="9"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={song.capo}
-                onChange={(e) => onUpdateSong({ capo: Number(e.target.value) })}
-                className="capo-input"
+                onChange={(e) => {
+                  const sanitized = e.target.value.replace(/[^0-9]/g, '').slice(0, 2);
+                  const parsed = sanitized === '' ? 0 : parseInt(sanitized, 10);
+                  onUpdateSong({ capo: Math.min(15, Math.max(0, parsed)) });
+                }}
+                style={{
+                  width: '32px',
+                  border: 'none',
+                  background: 'transparent',
+                  textAlign: 'center',
+                  fontWeight: 700,
+                  fontSize: '0.9rem',
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-main)',
+                  padding: 0,
+                  outline: 'none',
+                }}
+                title="カポ位置 (0〜15、直接入力可)"
               />
-            </span>
+              <button
+                className="counter-btn"
+                onClick={() => onUpdateSong({ capo: Math.min(15, song.capo + 1) })}
+                title="カポを上げる (+1)"
+              >
+                +
+              </button>
+            </div>
           </div>
 
           {/* BPM */}
           <div className="sheet-meta-item">
             <span>BPM: </span>
             <input
-              type="number"
-              min="40"
-              max="240"
-              value={song.tempo || 80}
-              onChange={(e) => onUpdateSong({ tempo: Number(e.target.value) })}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={song.tempo !== undefined ? String(song.tempo) : ''}
+              onKeyDown={(e) => {
+                // Allow navigation and shortcut keys
+                if (
+                  [
+                    'Backspace',
+                    'Tab',
+                    'Enter',
+                    'Escape',
+                    'ArrowLeft',
+                    'ArrowRight',
+                    'ArrowUp',
+                    'ArrowDown',
+                    'Delete',
+                    'Home',
+                    'End',
+                  ].includes(e.key) ||
+                  e.ctrlKey ||
+                  e.metaKey
+                ) {
+                  return;
+                }
+                // Disallow any non-numeric key
+                if (!/^[0-9]$/.test(e.key)) {
+                  e.preventDefault();
+                }
+              }}
+              onChange={(e) => {
+                // Filter out non-numeric characters (handles paste & IME) and limit to 3 digits
+                const digitsOnly = e.target.value.replace(/[^0-9]/g, '').slice(0, 3);
+                const val = digitsOnly === '' ? undefined : parseInt(digitsOnly, 10);
+                onUpdateSong({ tempo: val });
+              }}
+              placeholder="80"
               className="inline-meta-input"
               style={{ width: '55px' }}
+              title="BPMを入力 (数字のみ)"
             />
           </div>
         </div>
@@ -473,7 +654,7 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
         <div className="sheet-diagrams-bar">
           {uniqueChords.map((chord) => (
             <div key={chord} className="diagram-item">
-              <ChordDiagram chord={chord} width={75} height={95} />
+              <ChordDiagram chord={chord} width={82} height={66} />
             </div>
           ))}
         </div>
@@ -543,6 +724,11 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
                     className="section-badge-input"
                     value={line.sectionTitle || ''}
                     onChange={(e) => handleSectionTitleChange(lineIndex, e.target.value)}
+                    onKeyDown={(e) => {
+                      if ((e.key === 'Enter' || e.key === 'Escape') && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+                        e.currentTarget.blur();
+                      }
+                    }}
                     placeholder="セクション名 (Intro, サビ, Aメロ...)"
                   />
                 </div>
@@ -556,6 +742,14 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
                   >
                     <Plus size={13} />
                     <span>行</span>
+                  </button>
+                  <button
+                    className="btn-mini"
+                    onClick={() => handleAddSection(lineIndex)}
+                    title="この下に新しいセクションを追加"
+                  >
+                    <Tag size={12} />
+                    <span>セクション</span>
                   </button>
                   <button
                     className="btn-mini btn-danger"
@@ -573,7 +767,11 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
           if (line.type === 'empty') {
             return (
               <div key={`empty-${lineIndex}`} className="empty-row group-hover-parent">
-                <div style={{ height: '1.2rem', width: '100%' }} />
+                <div
+                  style={{ height: '1.4rem', width: '100%', cursor: 'pointer' }}
+                  onDoubleClick={() => handleAddSection(lineIndex)}
+                  title="ダブルクリックでセクションを追加"
+                />
                 <div className="row-actions no-print">
                   <button
                     className="btn-mini"
@@ -581,6 +779,15 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
                     title="ここに歌詞行を追加"
                   >
                     <Plus size={13} />
+                    <span>行</span>
+                  </button>
+                  <button
+                    className="btn-mini"
+                    onClick={() => handleAddSection(lineIndex)}
+                    title="ここにセクションを追加"
+                  >
+                    <Tag size={12} />
+                    <span>セクション</span>
                   </button>
                   <button
                     className="btn-mini btn-danger"
@@ -597,14 +804,23 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
           // Lyrics line with interactive chord pairs
           return (
             <div key={`line-${lineIndex}`} className="sheet-line group-hover-parent">
-              <div className="pairs-wrapper">
+              <div
+                className="pairs-wrapper"
+                onDoubleClick={(e) => handleWrapperDoubleClick(e, lineIndex)}
+                title="余白をダブルクリックで行末にコード追加"
+              >
                 {line.pairs &&
                   line.pairs.map((pair, pairIndex) => {
                     const isCurrentDropTarget =
                       dropTarget?.lineIndex === lineIndex && dropTarget?.pairIndex === pairIndex;
-                    const isBeingDragged =
-                      draggedChord?.sourceLineIndex === lineIndex &&
-                      draggedChord?.sourcePairIndex === pairIndex;
+                    const isBeingDraggedChord =
+                      draggedItem?.type === 'chord' &&
+                      draggedItem?.sourceLineIndex === lineIndex &&
+                      draggedItem?.sourcePairIndex === pairIndex;
+                    const isBeingDraggedLyric =
+                      draggedItem?.type === 'lyric' &&
+                      draggedItem?.sourceLineIndex === lineIndex &&
+                      draggedItem?.sourcePairIndex === pairIndex;
 
                     const showInlineDiagram =
                       (diagramDisplay === 'inline' || diagramDisplay === 'both') && Boolean(pair.chord);
@@ -623,12 +839,12 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
                         {pair.chord ? (
                           <button
                             type="button"
-                            className={`chord-tag clickable ${isBeingDragged ? 'is-dragging' : ''}`}
+                            className={`chord-tag clickable ${isBeingDraggedChord ? 'is-dragging' : ''}`}
                             draggable={true}
-                            onDragStart={(e) => handleDragStart(e, lineIndex, pairIndex, pair.chord!)}
+                            onDragStart={(e) => handleDragStart(e, 'chord', lineIndex, pairIndex, pair.chord!)}
                             onDragEnd={handleDragEnd}
                             onClick={(e) => {
-                              if (draggedChord) return;
+                              if (draggedItem) return;
                               handleChordClick(e, lineIndex, pairIndex, pair.chord);
                             }}
                             title="クリックで編集、ドラッグで位置移動"
@@ -639,7 +855,7 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
                           <button
                             type="button"
                             className={`chord-add-placeholder no-print ${
-                              isCurrentDropTarget ? 'drop-active' : ''
+                              isCurrentDropTarget && draggedItem?.type === 'chord' ? 'drop-active' : ''
                             }`}
                             onClick={(e) => handleAddChordAboveLyric(e, lineIndex, pairIndex)}
                             title="クリックでコード追加、またはここにドロップ"
@@ -651,19 +867,44 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
                         {/* Inline Diagram between chord and lyrics */}
                         {showInlineDiagram && pair.chord && (
                           <div className="inline-diagram-container">
-                            <ChordDiagram chord={pair.chord} width={48} height={60} showName={false} />
+                            <ChordDiagram chord={pair.chord} width={52} height={36} showName={false} />
                           </div>
                         )}
 
-                        {/* Lyric Text: Editable input */}
-                        <input
-                          type="text"
-                          className="lyric-input"
-                          value={pair.lyric}
-                          size={Math.max(1, (pair.lyric || '').length)}
-                          onChange={(e) => handleLyricChange(lineIndex, pairIndex, e.target.value)}
-                          placeholder="　"
-                        />
+                        {/* Lyric Text: Editable input with drag handle & double-click to insert chord */}
+                        <div className="lyric-wrapper">
+                          <div
+                            className="lyric-drag-handle no-print"
+                            draggable={Boolean(pair.lyric && pair.lyric.trim())}
+                            onDragStart={(e) => handleDragStart(e, 'lyric', lineIndex, pairIndex, pair.lyric)}
+                            onDragEnd={handleDragEnd}
+                            title="ドラッグしてこの歌詞を移動"
+                          >
+                            <GripHorizontal size={11} />
+                          </div>
+                          <div className="lyric-input-box">
+                            <span className="lyric-sizer" aria-hidden="true">
+                              {pair.lyric || '　'}
+                            </span>
+                            <input
+                              type="text"
+                              className={`lyric-input ${isBeingDraggedLyric ? 'is-dragging-lyric' : ''}`}
+                              value={pair.lyric}
+                              onChange={(e) => handleLyricChange(lineIndex, pairIndex, e.target.value)}
+                              onKeyDown={(e) => {
+                                if ((e.key === 'Enter' || e.key === 'Escape') && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+                                  e.currentTarget.blur();
+                                }
+                              }}
+                              onBlur={(e) => {
+                                e.currentTarget.scrollLeft = 0;
+                              }}
+                              onDoubleClick={(e) => handleLyricDoubleClick(e, lineIndex, pairIndex)}
+                              title="クリックで編集、ダブルクリックでコード挿入 (Enterで確定)"
+                              placeholder="　"
+                            />
+                          </div>
+                        </div>
                       </div>
                     );
                   })}
@@ -679,35 +920,43 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
                   }}
                   onDrop={(e) => {
                     e.preventDefault();
-                    if (!draggedChord) return;
-                    // Append dragged chord to end of line
+                    if (!draggedItem) return;
                     const newLines = [...parsedLines];
-                    const sourceLine = newLines[draggedChord.sourceLineIndex];
+                    const sourceLine = newLines[draggedItem.sourceLineIndex];
                     const targetLine = newLines[lineIndex];
                     if (sourceLine?.pairs && targetLine?.pairs) {
                       const sourcePairs = [...sourceLine.pairs];
                       const targetPairs =
-                        draggedChord.sourceLineIndex === lineIndex ? sourcePairs : [...targetLine.pairs];
+                        draggedItem.sourceLineIndex === lineIndex ? sourcePairs : [...targetLine.pairs];
 
-                      // Remove from source
-                      sourcePairs[draggedChord.sourcePairIndex] = {
-                        ...sourcePairs[draggedChord.sourcePairIndex],
-                        chord: undefined,
-                      };
+                      if (draggedItem.type === 'chord') {
+                        // Remove from source
+                        sourcePairs[draggedItem.sourcePairIndex] = {
+                          ...sourcePairs[draggedItem.sourcePairIndex],
+                          chord: undefined,
+                        };
+                        // Add to end of target
+                        targetPairs.push({ chord: draggedItem.value, lyric: ' ' });
+                      } else if (draggedItem.type === 'lyric') {
+                        // Remove from source
+                        sourcePairs[draggedItem.sourcePairIndex] = {
+                          ...sourcePairs[draggedItem.sourcePairIndex],
+                          lyric: '',
+                        };
+                        // Add to end of target
+                        targetPairs.push({ lyric: draggedItem.value });
+                      }
 
-                      // Add to end of target
-                      targetPairs.push({ chord: draggedChord.chord, lyric: ' ' });
-
-                      newLines[draggedChord.sourceLineIndex] = { ...sourceLine, pairs: sourcePairs };
-                      if (draggedChord.sourceLineIndex !== lineIndex) {
+                      newLines[draggedItem.sourceLineIndex] = { ...sourceLine, pairs: sourcePairs };
+                      if (draggedItem.sourceLineIndex !== lineIndex) {
                         newLines[lineIndex] = { ...targetLine, pairs: targetPairs };
                       }
                       commitLines(newLines);
                     }
-                    setDraggedChord(null);
+                    setDraggedItem(null);
                     setDropTarget(null);
                   }}
-                  title="行末にコードを追加（ここにドラッグ＆ドロップも可能）"
+                  title="行末に追加（ここにコードや歌詞をドラッグ＆ドロップも可能）"
                 >
                   <Plus size={12} />
                   <Music size={11} />
@@ -726,7 +975,7 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
                 </button>
                 <button
                   className="btn-mini"
-                  onClick={() => handleAddSection(lineIndex, 'サビ')}
+                  onClick={() => handleAddSection(lineIndex)}
                   title="下に新しいセクションを追加"
                 >
                   <Tag size={12} />
@@ -743,26 +992,6 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
             </div>
           );
         })}
-
-        {/* Big append buttons at the bottom */}
-        <div className="sheet-append-bar no-print">
-          <button
-            className="btn"
-            style={{ padding: '0.6rem 1.2rem', gap: '0.5rem' }}
-            onClick={() => handleAddLine(parsedLines.length - 1)}
-          >
-            <Plus size={16} />
-            <span>行を追加</span>
-          </button>
-          <button
-            className="btn"
-            style={{ padding: '0.6rem 1.2rem', gap: '0.5rem' }}
-            onClick={() => handleAddSection(parsedLines.length - 1, '新しいセクション')}
-          >
-            <Tag size={16} />
-            <span>セクション（サビ/Aメロ等）を追加</span>
-          </button>
-        </div>
       </div>
 
       {/* Floating Chord Picker Popover */}
@@ -770,6 +999,7 @@ export const SheetViewer: React.FC<SheetViewerProps> = ({
         <ChordPickerPopover
           initialChord={popover.initialChord}
           position={popover.position}
+          accidentalPreference={accidentalPreference}
           onSelect={handleApplyChord}
           onDelete={popover.isNew ? undefined : handleDeleteChord}
           onClose={() => setPopover(null)}
