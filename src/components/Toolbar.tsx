@@ -1,0 +1,162 @@
+import React from 'react';
+import { ColumnLayout, DiagramDisplay } from '../types/chord';
+import { 
+  Columns, 
+  AlignJustify, 
+  RotateCcw,
+  Undo2,
+  Redo2
+} from 'lucide-react';
+
+interface ToolbarProps {
+  transpose: number;
+  onTransposeChange: (val: number) => void;
+  capo: number;
+  onCapoChange: (val: number) => void;
+  columnLayout: ColumnLayout;
+  onColumnLayoutChange: (layout: ColumnLayout) => void;
+  diagramDisplay: DiagramDisplay;
+  onDiagramDisplayChange: (disp: DiagramDisplay) => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+}
+
+export const Toolbar: React.FC<ToolbarProps> = ({
+  transpose,
+  onTransposeChange,
+  capo,
+  onCapoChange,
+  columnLayout,
+  onColumnLayoutChange,
+  diagramDisplay,
+  onDiagramDisplayChange,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
+}) => {
+  return (
+    <div className="app-toolbar">
+      {/* Undo & Redo Group */}
+      <div className="toolbar-group">
+        <button
+          className="btn btn-icon"
+          onClick={onUndo}
+          disabled={!canUndo}
+          style={{ opacity: canUndo ? 1 : 0.4, cursor: canUndo ? 'pointer' : 'not-allowed' }}
+          title="元に戻す (Ctrl+Z)"
+        >
+          <Undo2 size={16} />
+          <span>戻す</span>
+        </button>
+        <button
+          className="btn btn-icon"
+          onClick={onRedo}
+          disabled={!canRedo}
+          style={{ opacity: canRedo ? 1 : 0.4, cursor: canRedo ? 'pointer' : 'not-allowed' }}
+          title="やり直す (Ctrl+Y)"
+        >
+          <Redo2 size={16} />
+          <span>進む</span>
+        </button>
+      </div>
+
+      <div style={{ width: '1px', height: '18px', background: 'var(--border-subtle)' }} />
+
+      {/* Transpose & Capo Group */}
+      <div className="toolbar-group">
+        <span className="toolbar-label">移調:</span>
+        <div className="counter-control">
+          <button
+            className="counter-btn"
+            onClick={() => onTransposeChange(transpose - 1)}
+            title="半音下げる (-1)"
+          >
+            -
+          </button>
+          <span className="counter-val">
+            {transpose > 0 ? `+${transpose}` : transpose}
+          </span>
+          <button
+            className="counter-btn"
+            onClick={() => onTransposeChange(transpose + 1)}
+            title="半音上げる (+1)"
+          >
+            +
+          </button>
+        </div>
+        {transpose !== 0 && (
+          <button
+            className="btn btn-icon"
+            onClick={() => onTransposeChange(0)}
+            title="移調リセット"
+            style={{ padding: '0.35rem' }}
+          >
+            <RotateCcw size={14} />
+          </button>
+        )}
+
+        <div style={{ width: '1px', height: '18px', background: 'var(--border-subtle)', margin: '0 4px' }} />
+
+        <span className="toolbar-label">Capo:</span>
+        <div className="counter-control">
+          <button
+            className="counter-btn"
+            onClick={() => onCapoChange(Math.max(0, capo - 1))}
+            title="カポを下げる"
+          >
+            -
+          </button>
+          <span className="counter-val">{capo}</span>
+          <button
+            className="counter-btn"
+            onClick={() => onCapoChange(Math.min(9, capo + 1))}
+            title="カポを上げる"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      {/* Diagrams & Layout */}
+      <div className="toolbar-group">
+        <span className="toolbar-label">ダイアグラム:</span>
+        <select
+          className="meta-input"
+          style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+          value={diagramDisplay}
+          onChange={(e) => onDiagramDisplayChange(e.target.value as DiagramDisplay)}
+        >
+          <option value="top">上部一覧</option>
+          <option value="inline">歌詞とコードの間</option>
+          <option value="both">両方</option>
+          <option value="none">非表示</option>
+        </select>
+
+        <div style={{ width: '1px', height: '18px', background: 'var(--border-subtle)', margin: '0 4px' }} />
+
+        <span className="toolbar-label">段組:</span>
+        <button
+          className={`btn ${columnLayout === '1col' ? 'btn-primary' : ''}`}
+          style={{ padding: '0.3rem 0.6rem' }}
+          onClick={() => onColumnLayoutChange('1col')}
+          title="1段組み"
+        >
+          <AlignJustify size={14} />
+          <span>1段</span>
+        </button>
+        <button
+          className={`btn ${columnLayout === '2col' ? 'btn-primary' : ''}`}
+          style={{ padding: '0.3rem 0.6rem' }}
+          onClick={() => onColumnLayoutChange('2col')}
+          title="2段組み (横長・印刷向け)"
+        >
+          <Columns size={14} />
+          <span>2段</span>
+        </button>
+      </div>
+    </div>
+  );
+};
